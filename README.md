@@ -3,7 +3,7 @@
 Interactive 3D web application for exploring global technology trends, programming languages, and startup ecosystems through an immersive globe visualization.
 
 🚀 Live Demo:
-👉 http://localhost:5173/globe3D_cyberpunk/
+👉 [DEMO](https://andrew17-2006.github.io/globe3D_cyberpunk/)
 
 📌 About the project
 
