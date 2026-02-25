@@ -6,6 +6,33 @@ import { countryData } from '../data/mockData';
 import { CountryFeature } from './types/types';
 
 const GlobeComponent = () => {
+  //фіксовані коди країн
+  const isoFix: Record<string, string> = {
+    DE: 'DEU',
+    IN: 'IND',
+    BR: 'BRA',
+    FR: 'FRA',
+    GB: 'GBR',
+    CN: 'CHN',
+    JP: 'JPN',
+    AU: 'AUS',
+    CA: 'CAN',
+    US: 'USA',
+  };
+
+  const nameFix: Record<string, string> = {
+    Germany: 'DEU',
+    India: 'IND',
+    Brazil: 'BRA',
+    France: 'FRA',
+    Canada: 'CAN',
+    Australia: 'AUS',
+    China: 'CHN',
+    Japan: 'JPN',
+    'United Kingdom': 'GBR',
+    'United States': 'USA',
+  };
+
   const globeEl = useRef<React.ElementRef<typeof Globe>>();
 
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -20,12 +47,87 @@ const GlobeComponent = () => {
 
   const isMobile = typeof window !== 'undefined' && 'ontouchstart' in window;
 
+  //хелпер для коду країни
+  const getCountryCode = (polygon: CountryFeature): string => {
+    let code =
+      polygon.properties.ISO_A3 ||
+      polygon.properties.iso_a3 ||
+      '';
+
+    if (code === '-99') {
+      code = '';
+    }
+
+    if (isoFix[code]) {
+      return isoFix[code];
+    }
+
+    const name =
+      polygon.properties.name ||
+      polygon.properties.ADMIN;
+
+    if (name && nameFix[name]) {
+      return nameFix[name];
+    }
+
+    return code;
+  };
+
+  const getPolygonCenter = (polygon: CountryFeature) => {
+    let latSum = 0;
+    let lngSum = 0;
+    let count = 0;
+
+    const addCoord = (coord: unknown) => {
+      if (
+        Array.isArray(coord) &&
+        coord.length >= 2 &&
+        typeof coord[0] === 'number' &&
+        typeof coord[1] === 'number'
+      ) {
+        lngSum += coord[0];
+        latSum += coord[1];
+        count++;
+      }
+    };
+
+    const geometry = polygon.geometry;
+
+    if (geometry.type === 'Polygon') {
+      geometry.coordinates.forEach((ring) => {
+        ring.forEach(addCoord);
+      });
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+      geometry.coordinates.forEach((poly) => {
+        poly.forEach((ring) => {
+          ring.forEach(addCoord);
+        });
+      });
+    }
+
+    return {
+      lat: count ? latSum / count : 0,
+      lng: count ? lngSum / count : 0,
+    };
+  };
+
   useEffect(() => {
     fetch(
       'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson'
     )
       .then((res) => res.json())
-      .then((data) => setCountries(data));
+      .then((data: { features: CountryFeature[] }) => {
+        const filtered = {
+          ...data,
+          features: data.features.filter(
+            (f) => getPolygonSize(f) > 30
+          ),
+        };
+
+        setCountries(filtered);
+      });
 
     setTimeout(() => {
       if (!globeEl.current) return;
@@ -89,19 +191,44 @@ const GlobeComponent = () => {
   const handleCountryClick = (polygon: CountryFeature) => {
     if (!globeEl.current) return;
 
-    const countryCode = polygon.properties.ISO_A3;
-    const data = countryData[countryCode];
+    const code = getCountryCode(polygon);
+    if (!code) return;
 
-    if (!data) return;
+    const data = countryData[code];
+    if (!data) {
+      setSelectedCountry({
+        name:
+          polygon.properties.ADMIN ||
+          polygon.properties.name ||
+          'Unknown',
+        code,
+        techTrends: ['No data yet'],
+        programmingLanguages: [],
+        githubActivity: {
+          repositories: 0,
+          developers: 0,
+          growth: 'N/A',
+        },
+        startupEcosystem: {
+          unicorns: 0,
+          funding: 'N/A',
+          hotSectors: [],
+        },
+        insights: ['No insights yet'],
+      });
+      return;
+    }
+
+    const { lat, lng } = getPolygonCenter(polygon);
 
     const controls = globeEl.current.controls();
     controls.autoRotate = false;
 
     globeEl.current.pointOfView(
       {
-        lat: polygon.properties.LAT ?? 0,
-        lng: polygon.properties.LON ?? 0,
-        altitude: 1.5,
+        lat,
+        lng,
+        altitude: 1.4,
       },
       1200
     );
@@ -109,6 +236,28 @@ const GlobeComponent = () => {
     setTimeout(() => {
       setSelectedCountry(data);
     }, 350);
+  };
+
+  const getPolygonSize = (polygon: CountryFeature) => {
+    let count = 0;
+
+    const geometry = polygon.geometry;
+
+    if (geometry.type === 'Polygon') {
+      geometry.coordinates.forEach(ring => {
+        count += ring.length;
+      });
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+      geometry.coordinates.forEach(poly => {
+        poly.forEach(ring => {
+          count += ring.length;
+        });
+      });
+    }
+
+    return count;
   };
 
   return (
@@ -121,18 +270,27 @@ const GlobeComponent = () => {
         ref={globeEl}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
         backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-        lineHoverPrecision={0}
+        lineHoverPrecision={0.1}
         polygonsData={countries.features}
         polygonAltitude={(d) => {
           const country = d as CountryFeature;
-          return country === hoverD ? 0.12 : 0.06;
+
+          const code = getCountryCode(country);
+
+          if (selectedCountry?.code === code) return 0.18;
+
+          if (country === hoverD) return 0.12;
+
+          if (countryData[code]) return 0.09;
+
+          return 0.06;
         }}
         polygonCapColor={(d) => {
           const country = d as CountryFeature;
-          const code = country.properties.ISO_A3;
+          const code = getCountryCode(country);
 
           if (selectedCountry?.code === code) {
-            return 'rgba(34,211,238,0.85)';
+            return 'rgba(34,211,238,0.9)';
           }
 
           if (country === hoverD) {
@@ -140,16 +298,26 @@ const GlobeComponent = () => {
           }
 
           if (countryData[code]) {
-            return 'rgba(139,92,246,0.45)';
+            return 'rgba(236,72,153,0.6)';
           }
 
           return 'rgba(80,80,80,0.25)';
         }}
         polygonSideColor={() => 'rgba(0,0,0,0.15)'}
-        polygonStrokeColor={() => '#00ffff'}
+        polygonStrokeColor={(d) => {
+          const country = d as CountryFeature;
+
+          const code = getCountryCode(country);
+
+          if (selectedCountry?.code === code) return '#22d3ee';
+
+          if (countryData[code]) return '#ec4899';
+
+          return '#00ffff';
+        }}
         polygonLabel={(d) => {
           const country = d as CountryFeature;
-          const code = country.properties.ISO_A3;
+          const code = getCountryCode(country);
           const data = countryData[code];
 
           return data
@@ -159,7 +327,7 @@ const GlobeComponent = () => {
                   Click to explore
                 </div>
               </div>`
-            : `<div>${country.properties.ADMIN}</div>`;
+            : `<div>${country.properties.name || country.properties.ADMIN}</div>`;
         }}
         onPolygonHover={
           isMobile ? undefined : (d) => setHoverD(d as CountryFeature | null)
