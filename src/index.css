@@ -79,3 +79,9 @@
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(to bottom, #a78bfa, #22d3ee);
 }
+
+.progress {
+  background: linear-gradient(90deg, #a855f7, #22d3ee);
+  box-shadow: 0 0 8px #22d3ee;
+  transition: width 0.6s ease;
+}

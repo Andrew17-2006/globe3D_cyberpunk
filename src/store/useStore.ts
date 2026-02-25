@@ -4,7 +4,7 @@ export interface CountryData {
   name: string;
   code: string;
   techTrends: string[];
-  programmingLanguages: { name: string; popularity: number }[];
+  programmingLanguages: { name: string; score: number }[];
   githubActivity: {
     repositories: number;
     developers: number;
